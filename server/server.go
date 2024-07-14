@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"slices"
 	"sync"
+	"time"
 
 	keyfile "github.com/foxboron/go-tpm-keyfiles"
 	"github.com/foxboron/ssh-tpm-agent/key"
@@ -119,13 +119,18 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		log.Fatalf("can't create sshpublickey")
 	}
+
+	after := time.Now()
+
+	before := after.Add(time.Minute * 5)
+
 	certificate := ssh.Certificate{
 		Key:             clientsshkey,
 		CertType:        ssh.UserCert,
 		ValidPrincipals: []string{"fox"},
 		KeyId:           "TPM Key",
-		ValidAfter:      0,
-		ValidBefore:     math.MaxUint64,
+		ValidAfter:      uint64(after.Unix()),
+		ValidBefore:     uint64(before.Unix()),
 		Permissions: ssh.Permissions{
 			Extensions: map[string]string{
 				"permit-agent-forwarding": "",
