@@ -73,7 +73,7 @@ func TestMain(t *testing.T) {
 	ts := httptest.NewServer(as.Handlers())
 	defer ts.Close()
 	c := client.NewClient(ts.URL)
-	k, cert, err := c.GetKey(rwc)
+	k, cert, err := c.GetKey(rwc, "test.local")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

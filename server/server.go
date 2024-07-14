@@ -23,6 +23,11 @@ import (
 	"github.com/google/go-tpm/tpm2/transport"
 )
 
+type MapState struct {
+	Host string
+	Srk  *tpm2.TPMTPublic
+}
+
 type TPMAttestServer struct {
 	rwc   transport.TPMCloser
 	eks   []string
@@ -82,7 +87,11 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	t.state.Store(string(challenge), tpm2.Marshal(params.SRK.Public))
+	v := &MapState{
+		Host: params.Host,
+		Srk:  params.SRK.Public,
+	}
+	t.state.Store(string(challenge), v)
 }
 
 func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) {
@@ -97,10 +106,8 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 		fmt.Println(err)
 		return
 	}
-	ek, err := tpm2.Unmarshal[tpm2.TPMTPublic](val.([]byte))
-	if err != nil {
-		log.Fatal(err)
-	}
+
+	state := val.(*MapState)
 
 	cakey := key.SSHTPMKey{t.ca}
 
@@ -109,7 +116,10 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 		log.Fatal(err)
 	}
 
-	clientkey, err := keyfile.NewImportablekey(ek, *pk, keyfile.WithParent(tpm2.TPMRHEndorsement))
+	clientkey, err := keyfile.NewImportablekey(state.Srk, *pk,
+		keyfile.WithParent(tpm2.TPMRHEndorsement),
+		keyfile.WithDescription(state.Host),
+	)
 	if err != nil {
 		log.Fatalf("can't create newloadablekey")
 	}
