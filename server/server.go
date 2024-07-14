@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"slices"
 	"sync"
@@ -119,8 +120,20 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 		log.Fatalf("can't create sshpublickey")
 	}
 	certificate := ssh.Certificate{
-		Key:      clientsshkey,
-		CertType: ssh.UserCert,
+		Key:             clientsshkey,
+		CertType:        ssh.UserCert,
+		ValidPrincipals: []string{"fox"},
+		KeyId:           "TPM Key",
+		ValidAfter:      0,
+		ValidBefore:     math.MaxUint64,
+		Permissions: ssh.Permissions{
+			Extensions: map[string]string{
+				"permit-agent-forwarding": "",
+				"permit-port-forwarding":  "",
+				"permit-pty":              "",
+				"permit-user-rc":          "",
+			},
+		},
 	}
 
 	casigner, err := cakey.Signer(t.rwc, []byte(nil), []byte(nil))
