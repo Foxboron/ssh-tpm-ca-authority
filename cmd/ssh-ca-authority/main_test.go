@@ -56,7 +56,6 @@ func TestMain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("message")
 	}
-	ekName := fmt.Sprintf("%x", ekHandle.Name.Buffer)
 	// Flush EK as we don't need it after this
 	keyfile.FlushHandle(rwc, ekHandle)
 
@@ -67,13 +66,27 @@ func TestMain(t *testing.T) {
 	}
 
 	as := server.NewTPMAttestServer(
-		rwc, []string{ekName}, ca,
+		rwc,
+		&server.Config{
+			Hosts: []*server.HostConf{
+				{
+					Host:   "test.local",
+					CaFile: &server.UnmarshalTPMkey{ca},
+					Users: []*server.UsersConf{
+						{
+							User: "fox",
+							EK:   fmt.Sprintf("%x", ekHandle.Name.Buffer),
+						},
+					},
+				},
+			},
+		},
 	)
 
 	ts := httptest.NewServer(as.Handlers())
 	defer ts.Close()
 	c := client.NewClient(ts.URL)
-	k, cert, err := c.GetKey(rwc, "test.local")
+	k, cert, err := c.GetKey(rwc, "fox", "test.local")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

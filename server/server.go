@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"slices"
 	"sync"
 	"time"
 
@@ -30,10 +29,9 @@ type MapState struct {
 }
 
 type TPMAttestServer struct {
-	rwc   transport.TPMCloser
-	eks   []string
-	state *sync.Map
-	ca    *keyfile.TPMKey
+	rwc    transport.TPMCloser
+	config *Config
+	state  *sync.Map
 }
 
 func (t *TPMAttestServer) Handlers() *http.ServeMux {
@@ -56,11 +54,17 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !slices.Contains(t.eks, fmt.Sprintf("%x", name.Buffer)) {
+	hconf, ok := t.config.HasHost(params.Host)
+	if !ok {
 		return
 	}
 
-	ok, err := params.VerifyAKCreation()
+	ok = hconf.IsValidUser(params.User, fmt.Sprintf("%x", name.Buffer))
+	if !ok {
+		return
+	}
+
+	ok, err = params.VerifyAKCreation()
 	if err != nil {
 		fmt.Println(err)
 		fmt.Fprintf(w, "failed checking AK creation: %v", err)
@@ -111,7 +115,12 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 
 	state := val.(*MapState)
 
-	cakey := key.SSHTPMKey{t.ca}
+	h, ok := t.config.HasHost(state.Host)
+	if !ok {
+		return
+	}
+
+	cakey := key.SSHTPMKey{h.CaFile.TPMKey}
 
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -181,11 +190,10 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func NewTPMAttestServer(rwc transport.TPMCloser, eks []string, ca *keyfile.TPMKey) *TPMAttestServer {
+func NewTPMAttestServer(rwc transport.TPMCloser, config *Config) *TPMAttestServer {
 	return &TPMAttestServer{
-		rwc:   rwc,
-		eks:   eks,
-		ca:    ca,
-		state: new(sync.Map),
+		rwc:    rwc,
+		config: config,
+		state:  new(sync.Map),
 	}
 }

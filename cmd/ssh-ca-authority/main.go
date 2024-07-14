@@ -2,29 +2,30 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 
-	keyfile "github.com/foxboron/go-tpm-keyfiles"
 	"github.com/foxboron/ssh-tpm-ca-authority/server"
 	"github.com/google/go-tpm/tpm2/transport"
 )
 
-var (
-	caFile = "id_ecdsa.tpm"
+const usage = `Usage:
+    ssh-tpm-ca-authority [FLAGS]
 
-	// These are eks we trust
-	eks = []string{
-		"000b502e5556de80baa022194b49e2cd67bd3aebdd8201d89ef88bfbe380b3cc9098",
-	}
-)
+Options:
+    --config PATH        File location of config.yaml
 
-func run(ctx context.Context, rwc transport.TPMCloser, ek []string, ca *keyfile.TPMKey) error {
+Example:
+    $ ssh-tpm-ca-authority --config config.yaml`
+
+func run(ctx context.Context, rwc transport.TPMCloser, config *server.Config) error {
+
 	as := server.NewTPMAttestServer(
-		rwc, ek, ca,
+		rwc, config,
 	)
 
 	srv := &http.Server{
@@ -51,23 +52,33 @@ func run(ctx context.Context, rwc transport.TPMCloser, ek []string, ca *keyfile.
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Println(usage)
+	}
+
+	var (
+		configPath string
+	)
+	flag.StringVar(&configPath, "config", "config.yaml", "config path")
+	flag.Parse()
+
+	b, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	config, err := server.NewConfig(b)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	ctx := context.Background()
 	rwc, err := transport.OpenTPM()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	b, err := os.ReadFile(caFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ca, err := keyfile.Decode(b)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := run(ctx, rwc, eks, ca); err != nil {
+	if err := run(ctx, rwc, config); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
