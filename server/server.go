@@ -25,6 +25,7 @@ import (
 
 type MapState struct {
 	Host string
+	User string
 	Srk  *tpm2.TPMTPublic
 }
 
@@ -89,6 +90,7 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 
 	v := &MapState{
 		Host: params.Host,
+		User: params.User,
 		Srk:  params.SRK.Public,
 	}
 	t.state.Store(string(challenge), v)

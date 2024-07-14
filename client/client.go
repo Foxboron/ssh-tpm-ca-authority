@@ -43,7 +43,7 @@ func (a *AttestClient) GetSubmitURL() string {
 	return fmt.Sprintf("%s/%s", a.url, "submit")
 }
 
-func (a *AttestClient) GetKey(rwc transport.TPMCloser, host string) (*keyfile.TPMKey, *ssh.Certificate, error) {
+func (a *AttestClient) GetKey(rwc transport.TPMCloser, user, host string) (*keyfile.TPMKey, *ssh.Certificate, error) {
 	ap, err := attest.NewAttestationParameters(rwc)
 	if err != nil {
 		return nil, nil, err
@@ -51,6 +51,7 @@ func (a *AttestClient) GetKey(rwc transport.TPMCloser, host string) (*keyfile.TP
 	defer keyfile.FlushHandle(rwc, ap.Handle.Handle)
 
 	ap.Host = host
+	ap.User = user
 
 	b, err := json.Marshal(ap)
 	if err != nil {

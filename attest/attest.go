@@ -122,6 +122,7 @@ type AttestationParameters struct {
 	// Not serialized
 	Handle *tpm2.NamedHandle
 	Host   string
+	User   string
 	EK     *tpm2.TPMTPublic
 	AK     *Attestation
 	SRK    *SignedSRK
@@ -131,6 +132,7 @@ func (a *AttestationParameters) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string][]byte{
 		"ek":                   tpm2.Marshal(a.EK),
 		"host":                 []byte(a.Host),
+		"user":                 []byte(a.User),
 		"ak_private":           a.AK.Private,
 		"ak_public":            tpm2.Marshal(a.AK.Public),
 		"ak_createdata":        a.AK.CreateData,
@@ -154,6 +156,7 @@ func (a *AttestationParameters) UnmarshalJSON(b []byte) error {
 	a.EK = ek
 
 	a.Host = string(obj["host"])
+	a.User = string(obj["user"])
 
 	akpub, err := tpm2.Unmarshal[tpm2.TPMTPublic](obj["ak_public"])
 	if err != nil {
