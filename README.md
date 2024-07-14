@@ -63,6 +63,8 @@ Inside your `~/.ssh/config` include a line of the hosts you want to match on.
 This ensures `ssh-tpm-add` will retrieve a signed key from the CA authority
 before authenticating towards the host.
 
+Note: This unreleased changes to `ssh-tpm-agent`
+
 ```ssh
 Match host gibson.ellingson.com exec "ssh-tpm-add --ca 'http://127.0.0.1:8080' --host '%h' --user '%r'"
 ```
