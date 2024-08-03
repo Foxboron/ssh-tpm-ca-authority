@@ -39,6 +39,8 @@ hosts:
     ca_file: id_ecdsa.tpm
     users:
       - user: zero_cool
+        oidc_connector: https://github.com/login/oauth
+        email: zero_cool@rightstrashing.com
         ek: 000ba1d6910d32dbafb47e1365e8a84606aaefc9bb2404f4f99082f6284a9b33415b
 ```
 
@@ -78,3 +80,10 @@ client$ ssh zero_cool@gibson.ellingson.com
 Last login: Sun Jul 14 17:01:46 2024 from 192.168.1.1337
 gibson%
 ```
+
+### Valid SSO values
+
+SSO values are based off on what sigstore currently supports.
+
+- `https://github.com/login/oauth`
+- `https://accounts.google.com`
