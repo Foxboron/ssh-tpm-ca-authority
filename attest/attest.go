@@ -113,7 +113,7 @@ type Attestation struct {
 	CreateSignature   []byte
 }
 
-type SignedSRK struct {
+type SignedSSHPubkey struct {
 	SSHPubkey ssh.PublicKey
 	Signature *tpm2.TPMTSignature
 }
@@ -121,12 +121,12 @@ type SignedSRK struct {
 // All parameters here
 type AttestationParameters struct {
 	// Not serialized
-	Handle *tpm2.NamedHandle
-	Host   string
-	User   string
-	EK     *tpm2.TPMTPublic
-	AK     *Attestation
-	SRK    *SignedSRK
+	Handle    *tpm2.NamedHandle
+	Host      string
+	User      string
+	EK        *tpm2.TPMTPublic
+	AK        *Attestation
+	SSHPubkey *SignedSSHPubkey
 }
 
 func (a *AttestationParameters) MarshalJSON() ([]byte, error) {
@@ -139,8 +139,8 @@ func (a *AttestationParameters) MarshalJSON() ([]byte, error) {
 		"ak_createdata":        a.AK.CreateData,
 		"ak_createattestation": a.AK.CreateAttestation,
 		"ak_createsignature":   a.AK.CreateSignature,
-		"srk_sshpubkey":        a.SRK.SSHPubkey.Marshal(),
-		"srk_signature":        tpm2.Marshal(a.SRK.Signature),
+		"ssh_sshpubkey":        a.SSHPubkey.SSHPubkey.Marshal(),
+		"ssh_signature":        tpm2.Marshal(a.SSHPubkey.Signature),
 	})
 }
 
@@ -170,17 +170,17 @@ func (a *AttestationParameters) UnmarshalJSON(b []byte) error {
 		CreateSignature:   obj["ak_createsignature"],
 	}
 
-	sig, err := tpm2.Unmarshal[tpm2.TPMTSignature](obj["srk_signature"])
+	sig, err := tpm2.Unmarshal[tpm2.TPMTSignature](obj["ssh_signature"])
 	if err != nil {
 		return err
 	}
 
-	sshpub, err := ssh.ParsePublicKey(obj["srk_sshpubkey"])
+	sshpub, err := ssh.ParsePublicKey(obj["ssh_sshpubkey"])
 	if err != nil {
 		return err
 	}
 
-	a.SRK = &SignedSRK{
+	a.SSHPubkey = &SignedSSHPubkey{
 		Signature: sig,
 		SSHPubkey: sshpub,
 	}
@@ -322,7 +322,7 @@ func NewAttestationParameters(rwc transport.TPMCloser, sshpub ssh.PublicKey) (*A
 			CreateAttestation: tpm2.Marshal(ccRsp.CertifyInfo),
 			CreateSignature:   tpm2.Marshal(ccRsp.Signature),
 		},
-		SRK: &SignedSRK{
+		SSHPubkey: &SignedSSHPubkey{
 			SSHPubkey: sshpub,
 			Signature: &sign.Signature,
 		},
@@ -479,7 +479,7 @@ func (a *AttestationParameters) Verify() (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	ok, err = a.VerifySignature(a.AK.Public, tpm2.Marshal(tpm2.TPM2BData{Buffer: a.SRK.SSHPubkey.Marshal()}), a.SRK.Signature)
+	ok, err = a.VerifySignature(a.AK.Public, tpm2.Marshal(tpm2.TPM2BData{Buffer: a.SSHPubkey.SSHPubkey.Marshal()}), a.SSHPubkey.Signature)
 	if err != nil {
 		return false, err
 	}

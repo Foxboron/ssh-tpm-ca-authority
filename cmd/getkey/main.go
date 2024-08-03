@@ -57,7 +57,7 @@ func main() {
 	defer rwc.Close()
 
 	c := client.NewClient("http://127.0.0.1:8080")
-	kk, _, err := c.GetKey(rwc, "", "")
+	kk, _, err := c.GetKey(rwc, "fox", "nassen.tailc01fe.ts.net")
 	if err != nil {
 		log.Fatal(err)
 	}

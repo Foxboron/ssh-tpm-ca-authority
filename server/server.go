@@ -117,7 +117,7 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		Host:     params.Host,
 		User:     params.User,
 		EK:       userek,
-		SSHPubky: params.SRK.SSHPubkey,
+		SSHPubky: params.SSHPubkey.SSHPubkey,
 		Nonce:    ch.Nonce,
 	}
 	t.state.Store(string(challenge), v)
