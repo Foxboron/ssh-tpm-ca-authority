@@ -10,7 +10,9 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	keyfile "github.com/foxboron/go-tpm-keyfiles"
+	"github.com/foxboron/ssh-tpm-agent/key"
 	"github.com/foxboron/ssh-tpm-ca-authority/attest"
+	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
 )
 
@@ -44,9 +46,24 @@ func (a *AttestClient) GetSubmitURL() string {
 }
 
 func (a *AttestClient) GetKey(rwc transport.TPMCloser, user, host string) (*keyfile.TPMKey, *ssh.Certificate, error) {
-	ap, err := attest.NewAttestationParameters(rwc)
+	userkey, err := keyfile.NewLoadableKey(rwc, tpm2.TPMAlgECC, 256, []byte(""))
 	if err != nil {
 		return nil, nil, err
+	}
+	sshca, err := a.GetCASignedKey(rwc, userkey, user, host)
+	return userkey, sshca, err
+}
+
+func (a *AttestClient) GetCASignedKey(rwc transport.TPMCloser, clientkey *keyfile.TPMKey, user, host string) (*ssh.Certificate, error) {
+	clientSSHKey := key.SSHTPMKey{clientkey}
+	clientsshkey, err := clientSSHKey.SSHPublicKey()
+	if err != nil {
+		return nil, err
+	}
+
+	ap, err := attest.NewAttestationParameters(rwc, clientsshkey)
+	if err != nil {
+		return nil, err
 	}
 	defer keyfile.FlushHandle(rwc, ap.Handle.Handle)
 
@@ -55,63 +72,60 @@ func (a *AttestClient) GetKey(rwc transport.TPMCloser, user, host string) (*keyf
 
 	b, err := json.Marshal(ap)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", a.GetAttestURL(), bytes.NewBuffer(b))
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed building attest request: %v", err)
 	}
 
 	resp, err := a.c.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed doing attest: %v", err)
 	}
 
 	ch, err := ijson.Decode[*attest.EncryptedCredential](resp.Body)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed decording json encryptedcredential: %v", err)
 	}
 
 	secret, err := ap.GetSecret(rwc, ch)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed getting secret: %v", err)
 	}
 
 	b, err = json.Marshal(ChallengeResponse{
 		Secret: secret,
+		Jwt:    "",
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed marshalling challenge response: %v", err)
 	}
 
 	req, err = http.NewRequest("POST", a.GetSubmitURL(), bytes.NewBuffer(b))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	resp, err = a.c.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	sshkey, err := ijson.Decode[*SignedCertResponse](resp.Body)
 	if err != nil {
-		return nil, nil, err
-	}
-	k, err := keyfile.Decode(sshkey.ImportableKey)
-	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	pubkey, err := ssh.ParsePublicKey(sshkey.SignedSSHCert)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	cert, ok := pubkey.(*ssh.Certificate)
 	if !ok {
-		return nil, nil, fmt.Errorf("failed parsing ssh certificate")
+		return nil, fmt.Errorf("failed parsing ssh certificate")
 	}
-	return k, cert, err
+	return cert, err
 }

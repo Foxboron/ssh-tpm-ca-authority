@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -11,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	keyfile "github.com/foxboron/go-tpm-keyfiles"
 	"github.com/foxboron/ssh-tpm-agent/key"
 	"github.com/foxboron/ssh-tpm-ca-authority/client"
 	ijson "github.com/foxboron/ssh-tpm-ca-authority/internal/json"
@@ -23,9 +20,9 @@ import (
 )
 
 type MapState struct {
-	Host string
-	User string
-	Srk  *tpm2.TPMTPublic
+	Host     string
+	User     string
+	SSHPubky ssh.PublicKey
 }
 
 type TPMAttestServer struct {
@@ -59,7 +56,7 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ok = hconf.IsValidUser(params.User, fmt.Sprintf("%x", name.Buffer))
+	user, ok := hconf.GetUser(params.User, fmt.Sprintf("%x", name.Buffer))
 	if !ok {
 		return
 	}
@@ -73,6 +70,18 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 
 	if !ok {
 		fmt.Fprintf(w, "AK creation doesn't validate")
+		return
+	}
+
+	ok, err = params.Verify()
+	if err != nil {
+		fmt.Println(err)
+		fmt.Fprintf(w, "failed checking signature over ssh pubkey creation: %v", err)
+		return
+	}
+
+	if !ok {
+		fmt.Fprintf(w, "signature over ssh key isn't valid")
 		return
 	}
 
@@ -93,9 +102,9 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	v := &MapState{
-		Host: params.Host,
-		User: params.User,
-		Srk:  params.SRK.Public,
+		Host:     params.Host,
+		User:     params.User,
+		SSHPubky: params.SRK.SSHPubkey,
 	}
 	t.state.Store(string(challenge), v)
 }
@@ -122,31 +131,12 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 
 	cakey := key.SSHTPMKey{h.CaFile.TPMKey}
 
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	clientkey, err := keyfile.NewImportablekey(state.Srk, *pk,
-		keyfile.WithParent(tpm2.TPMRHEndorsement),
-		keyfile.WithDescription(state.Host),
-	)
-	if err != nil {
-		log.Fatalf("can't create newloadablekey")
-	}
-
-	clientSSHKey := key.SSHTPMKey{clientkey}
-	clientsshkey, err := clientSSHKey.SSHPublicKey()
-	if err != nil {
-		log.Fatalf("can't create sshpublickey")
-	}
-
 	after := time.Now()
 
 	before := after.Add(time.Minute * 5)
 
 	certificate := ssh.Certificate{
-		Key:             clientsshkey,
+		Key:             state.SSHPubky,
 		CertType:        ssh.UserCert,
 		ValidPrincipals: []string{"fox"},
 		KeyId:           "TPM Key",
@@ -180,7 +170,6 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	rsp := &client.SignedCertResponse{
-		ImportableKey: clientkey.Bytes(),
 		SignedSSHCert: certificate.Marshal(),
 	}
 

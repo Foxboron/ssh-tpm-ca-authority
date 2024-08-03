@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto"
 	"fmt"
 	"io"
 	"log"
@@ -86,31 +85,18 @@ func TestMain(t *testing.T) {
 	ts := httptest.NewServer(as.Handlers())
 	defer ts.Close()
 	c := client.NewClient(ts.URL)
-	k, cert, err := c.GetKey(rwc, "fox", "test.local")
+
+	userkey, err := keyfile.NewLoadableKey(rwc, tpm2.TPMAlgECC, 256, []byte(""))
 	if err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("message")
+	}
+
+	cert, err := c.GetCASignedKey(rwc, userkey, "fox", "test.local")
+	if err != nil {
+		t.Errorf("failed getting ca signed key: %v", err)
 	}
 
 	if cert.Type() != "ecdsa-sha2-nistp256-cert-v01@openssh.com" {
 		t.Fatalf("not the correct cert type")
-	}
-
-	h := crypto.SHA256.New()
-	h.Write([]byte("heyho"))
-	b := h.Sum(nil)
-
-	signer, err := k.Signer(rwc, []byte(nil), []byte(nil))
-	if err != nil {
-		t.Fatalf("failed creating signer")
-	}
-
-	sig, err := signer.Sign((io.Reader)(nil), b[:], crypto.SHA256)
-	if err != nil {
-		t.Fatalf("failed TPM2_Sign")
-	}
-
-	ok, err := k.Verify(crypto.SHA256, b[:], sig)
-	if !ok || err != nil {
-		t.Fatalf("failed signing hash")
 	}
 }

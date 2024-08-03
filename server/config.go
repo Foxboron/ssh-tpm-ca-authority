@@ -43,6 +43,16 @@ func (h *HostConf) IsValidUser(user string, ek string) bool {
 	})
 }
 
+func (h *HostConf) GetUser(user string, ek string) (*UsersConf, bool) {
+	index := slices.IndexFunc(h.Users, func(u *UsersConf) bool {
+		return u.User == user && u.EK == ek
+	})
+	if index == -1 {
+		return nil, false
+	}
+	return h.Users[index], true
+}
+
 type Config struct {
 	Hosts []*HostConf `yaml:"hosts"`
 }

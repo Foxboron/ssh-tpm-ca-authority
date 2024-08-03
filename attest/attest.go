@@ -19,6 +19,7 @@ import (
 	"github.com/foxboron/go-tpm-keyfiles/template"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
+	"golang.org/x/crypto/ssh"
 )
 
 var (
@@ -113,7 +114,7 @@ type Attestation struct {
 }
 
 type SignedSRK struct {
-	Public    *tpm2.TPMTPublic
+	SSHPubkey ssh.PublicKey
 	Signature *tpm2.TPMTSignature
 }
 
@@ -138,7 +139,7 @@ func (a *AttestationParameters) MarshalJSON() ([]byte, error) {
 		"ak_createdata":        a.AK.CreateData,
 		"ak_createattestation": a.AK.CreateAttestation,
 		"ak_createsignature":   a.AK.CreateSignature,
-		"srk_public":           tpm2.Marshal(a.SRK.Public),
+		"srk_sshpubkey":        a.SRK.SSHPubkey.Marshal(),
 		"srk_signature":        tpm2.Marshal(a.SRK.Signature),
 	})
 }
@@ -169,18 +170,19 @@ func (a *AttestationParameters) UnmarshalJSON(b []byte) error {
 		CreateSignature:   obj["ak_createsignature"],
 	}
 
-	pub, err := tpm2.Unmarshal[tpm2.TPMTPublic](obj["srk_public"])
-	if err != nil {
-		return err
-	}
 	sig, err := tpm2.Unmarshal[tpm2.TPMTSignature](obj["srk_signature"])
 	if err != nil {
 		return err
 	}
 
+	sshpub, err := ssh.ParsePublicKey(obj["srk_sshpubkey"])
+	if err != nil {
+		return err
+	}
+
 	a.SRK = &SignedSRK{
-		Public:    pub,
 		Signature: sig,
+		SSHPubkey: sshpub,
 	}
 	return nil
 }
@@ -232,7 +234,7 @@ func getAK(rwc transport.TPMCloser) (*tpm2.NamedHandle, *tpm2.CreatePrimaryRespo
 	}, akRsp, nil
 }
 
-func NewAttestationParameters(rwc transport.TPMCloser) (*AttestationParameters, error) {
+func NewAttestationParameters(rwc transport.TPMCloser, sshpub ssh.PublicKey) (*AttestationParameters, error) {
 	akHandle, AKrsp, err := getAK(rwc)
 	if err != nil {
 		return nil, err
@@ -269,18 +271,11 @@ func NewAttestationParameters(rwc transport.TPMCloser) (*AttestationParameters, 
 
 	defer keyfile.FlushHandle(rwc, akHandle)
 
-	// This is what we want out key to be created under
-	srkHandle, srkPub, _, err := CreateSRK(rwc, tpm2.TPMRHEndorsement, []byte(nil))
-	if err != nil {
-		return nil, err
-	}
-	defer keyfile.FlushHandle(rwc, srkHandle)
-
 	h, err := tpm2.Hash{
 		Hierarchy: tpm2.TPMRHEndorsement,
 		HashAlg:   tpm2.TPMAlgSHA256,
 		Data: tpm2.TPM2BMaxBuffer{
-			Buffer: tpm2.Marshal(srkPub),
+			Buffer: tpm2.Marshal(tpm2.TPM2BData{Buffer: sshpub.Marshal()}),
 		},
 	}.Execute(rwc)
 	if err != nil {
@@ -328,7 +323,7 @@ func NewAttestationParameters(rwc transport.TPMCloser) (*AttestationParameters, 
 			CreateSignature:   tpm2.Marshal(ccRsp.Signature),
 		},
 		SRK: &SignedSRK{
-			Public:    srkPub,
+			SSHPubkey: sshpub,
 			Signature: &sign.Signature,
 		},
 	}, nil
@@ -484,7 +479,7 @@ func (a *AttestationParameters) Verify() (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	ok, err = a.VerifySignature(a.AK.Public, tpm2.Marshal(a.SRK.Public), a.SRK.Signature)
+	ok, err = a.VerifySignature(a.AK.Public, tpm2.Marshal(tpm2.TPM2BData{Buffer: a.SRK.SSHPubkey.Marshal()}), a.SRK.Signature)
 	if err != nil {
 		return false, err
 	}
