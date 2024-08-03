@@ -57,7 +57,7 @@ func (a *AttestClient) GetKey(rwc transport.TPMCloser, user, host string) (*keyf
 }
 
 func (a *AttestClient) GetCASignedKey(rwc transport.TPMCloser, clientkey *keyfile.TPMKey, user, host string) (*ssh.Certificate, error) {
-	clientSSHKey := key.SSHTPMKey{clientkey}
+	clientSSHKey := key.SSHTPMKey{TPMKey: clientkey}
 	clientsshkey, err := clientSSHKey.SSHPublicKey()
 	if err != nil {
 		return nil, err

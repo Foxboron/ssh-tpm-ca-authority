@@ -159,7 +159,7 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cakey := key.SSHTPMKey{h.CaFile.TPMKey}
+	cakey := key.SSHTPMKey{TPMKey: h.CaFile.TPMKey}
 
 	after := time.Now()
 
