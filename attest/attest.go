@@ -518,6 +518,8 @@ func (a *AttestationParameters) CreateChallenge(secret []byte) (*EncryptedCreden
 type EncryptedCredential struct {
 	Credential []byte
 	Secret     []byte
+	OIDC       string
+	Nonce      string
 }
 
 func createECCSeed(pub *tpm2.TPMTPublic, label string) (seed, encryptedSeed []byte, err error) {

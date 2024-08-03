@@ -12,12 +12,14 @@ import (
 	keyfile "github.com/foxboron/go-tpm-keyfiles"
 	"github.com/foxboron/ssh-tpm-agent/key"
 	"github.com/foxboron/ssh-tpm-ca-authority/attest"
+	tpmoidc "github.com/foxboron/ssh-tpm-ca-authority/oidc"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
 )
 
 type ChallengeResponse struct {
 	Secret []byte
+	Jwt    string
 }
 
 type SignedCertResponse struct {
@@ -84,7 +86,6 @@ func (a *AttestClient) GetCASignedKey(rwc transport.TPMCloser, clientkey *keyfil
 	if err != nil {
 		return nil, fmt.Errorf("failed doing attest: %v", err)
 	}
-
 	ch, err := ijson.Decode[*attest.EncryptedCredential](resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed decording json encryptedcredential: %v", err)
@@ -95,9 +96,14 @@ func (a *AttestClient) GetCASignedKey(rwc transport.TPMCloser, clientkey *keyfil
 		return nil, fmt.Errorf("failed getting secret: %v", err)
 	}
 
+	jwt, err := tpmoidc.RunOIDCFlow(ch.OIDC, string(ch.Nonce))
+	if err != nil {
+		return nil, fmt.Errorf("filed producing jwt: %v", err)
+	}
+
 	b, err = json.Marshal(ChallengeResponse{
 		Secret: secret,
-		Jwt:    "",
+		Jwt:    jwt,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed marshalling challenge response: %v", err)

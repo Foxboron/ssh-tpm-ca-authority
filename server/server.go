@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/foxboron/ssh-tpm-agent/key"
 	"github.com/foxboron/ssh-tpm-ca-authority/client"
 	ijson "github.com/foxboron/ssh-tpm-ca-authority/internal/json"
+	"github.com/foxboron/ssh-tpm-ca-authority/oidc"
+	"github.com/segmentio/ksuid"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/foxboron/ssh-tpm-ca-authority/attest"
@@ -22,7 +25,9 @@ import (
 type MapState struct {
 	Host     string
 	User     string
+	EK       string
 	SSHPubky ssh.PublicKey
+	Nonce    string
 }
 
 type TPMAttestServer struct {
@@ -56,8 +61,12 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	user, ok := hconf.GetUser(params.User, fmt.Sprintf("%x", name.Buffer))
+	userek := fmt.Sprintf("%x", name.Buffer)
+
+	user, ok := hconf.GetUser(params.User, userek)
 	if !ok {
+		fmt.Println("invalid user")
+		fmt.Fprintf(w, "invalid user")
 		return
 	}
 
@@ -95,6 +104,9 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	ch.OIDC = user.OIDCConnector
+	ch.Nonce = ksuid.New().String()
+
 	if err := ijson.Encode(w, 200, ch); err != nil {
 		fmt.Println(err)
 		fmt.Fprintf(w, "can't return challenge")
@@ -104,7 +116,9 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 	v := &MapState{
 		Host:     params.Host,
 		User:     params.User,
+		EK:       userek,
 		SSHPubky: params.SRK.SSHPubkey,
+		Nonce:    ch.Nonce,
 	}
 	t.state.Store(string(challenge), v)
 }
@@ -129,6 +143,22 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	userconf, ok := h.GetUser(state.User, state.EK)
+	if !ok {
+		return
+	}
+
+	ok, err = oidc.VerifyUserAndJWT(userconf.OIDCConnector, userconf.Email, string(state.Nonce), cr.Jwt)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	if !ok {
+		fmt.Println("failed auth")
+		return
+	}
+
 	cakey := key.SSHTPMKey{h.CaFile.TPMKey}
 
 	after := time.Now()
@@ -138,7 +168,7 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 	certificate := ssh.Certificate{
 		Key:             state.SSHPubky,
 		CertType:        ssh.UserCert,
-		ValidPrincipals: []string{"fox"},
+		ValidPrincipals: []string{state.User},
 		KeyId:           "TPM Key",
 		ValidAfter:      uint64(after.Unix()),
 		ValidBefore:     uint64(before.Unix()),
@@ -151,6 +181,8 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 			},
 		},
 	}
+
+	slog.Info("issued SSH certificate", slog.String("user", state.User))
 
 	casigner, err := cakey.Signer(t.rwc, []byte(nil), []byte(nil))
 	if err != nil {

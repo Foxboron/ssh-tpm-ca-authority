@@ -27,8 +27,10 @@ func (v *UnmarshalTPMkey) UnmarshalYAML(b []byte) error {
 }
 
 type UsersConf struct {
-	User string `yaml:"user"`
-	EK   string `yaml:"ek"`
+	User          string `yaml:"user"`
+	EK            string `yaml:"ek"`
+	Email         string `yaml:"email"`
+	OIDCConnector string `yaml:"oidc_connector"`
 }
 
 type HostConf struct {
