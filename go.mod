@@ -4,7 +4,7 @@ go 1.22.4
 
 require (
 	github.com/coreos/go-oidc/v3 v3.11.0
-	github.com/foxboron/go-tpm-keyfiles v0.0.0-20240725205618-b7c5a84edf9d
+	github.com/foxboron/go-tpm-keyfiles v0.0.0-20240805214234-f870d6f1ff68
 	github.com/foxboron/ssh-tpm-agent v1.0.0-rc2.0.20240714164000-1a148c850220
 	github.com/goccy/go-yaml v1.11.3
 	github.com/google/go-tpm v0.9.2-0.20240625170440-991b038b62b6
@@ -23,6 +23,6 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
-	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/sys v0.23.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 )

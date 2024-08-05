@@ -23,11 +23,11 @@ import (
 )
 
 type MapState struct {
-	Host     string
-	User     string
-	EK       string
-	SSHPubky ssh.PublicKey
-	Nonce    string
+	Host      string
+	User      string
+	EK        string
+	SSHPubkey *tpm2.TPMTPublic
+	Nonce     string
 }
 
 type TPMAttestServer struct {
@@ -70,7 +70,7 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ok, err = params.VerifyAKCreation()
+	ok, err = params.AK.VerifyCreation(true)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Fprintf(w, "failed checking AK creation: %v", err)
@@ -88,7 +88,6 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		fmt.Fprintf(w, "failed checking signature over ssh pubkey creation: %v", err)
 		return
 	}
-
 	if !ok {
 		fmt.Fprintf(w, "signature over ssh key isn't valid")
 		return
@@ -114,11 +113,11 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	v := &MapState{
-		Host:     params.Host,
-		User:     params.User,
-		EK:       userek,
-		SSHPubky: params.SSHPubkey.SSHPubkey,
-		Nonce:    ch.Nonce,
+		Host:      params.Host,
+		User:      params.User,
+		EK:        userek,
+		SSHPubkey: params.TPMBoundKey.Public,
+		Nonce:     ch.Nonce,
 	}
 	t.state.Store(string(challenge), v)
 }
@@ -165,8 +164,18 @@ func (t *TPMAttestServer) submitHandler(w http.ResponseWriter, r *http.Request) 
 
 	before := after.Add(time.Minute * 5)
 
+	// Create the SSH key from the tpm2.TPMTPublic we got and attested
+	eccKey, err := attest.GetECDSAFromTPMTPublic(state.SSHPubkey)
+	if err != nil {
+		log.Fatal(err)
+	}
+	boundsshkey, err := ssh.NewPublicKey(eccKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	certificate := ssh.Certificate{
-		Key:             state.SSHPubky,
+		Key:             boundsshkey,
 		CertType:        ssh.UserCert,
 		ValidPrincipals: []string{state.User},
 		KeyId:           "TPM Key",

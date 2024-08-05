@@ -106,8 +106,8 @@ var (
 )
 
 type Attestation struct {
-	Private           []byte
 	Public            *tpm2.TPMTPublic
+	Signer            *tpm2.TPMTPublic
 	CreateData        []byte
 	CreateAttestation []byte
 	CreateSignature   []byte
@@ -121,26 +121,30 @@ type SignedSSHPubkey struct {
 // All parameters here
 type AttestationParameters struct {
 	// Not serialized
-	Handle    *tpm2.NamedHandle
-	Host      string
-	User      string
-	EK        *tpm2.TPMTPublic
-	AK        *Attestation
-	SSHPubkey *SignedSSHPubkey
+	Handle      *tpm2.NamedHandle
+	Host        string
+	User        string
+	EK          *tpm2.TPMTPublic
+	AK          *Attestation
+	TPMBoundKey *Attestation
 }
 
 func (a *AttestationParameters) MarshalJSON() ([]byte, error) {
+	// Do we need this?
+	// "ak_signer":            tpm2.Marshal(a.AK.Signer),
 	return json.Marshal(map[string][]byte{
-		"ek":                   tpm2.Marshal(a.EK),
-		"host":                 []byte(a.Host),
-		"user":                 []byte(a.User),
-		"ak_private":           a.AK.Private,
-		"ak_public":            tpm2.Marshal(a.AK.Public),
-		"ak_createdata":        a.AK.CreateData,
-		"ak_createattestation": a.AK.CreateAttestation,
-		"ak_createsignature":   a.AK.CreateSignature,
-		"ssh_sshpubkey":        a.SSHPubkey.SSHPubkey.Marshal(),
-		"ssh_signature":        tpm2.Marshal(a.SSHPubkey.Signature),
+		"ek":                         tpm2.Marshal(a.EK),
+		"host":                       []byte(a.Host),
+		"user":                       []byte(a.User),
+		"ak_public":                  tpm2.Marshal(a.AK.Public),
+		"ak_createdata":              a.AK.CreateData,
+		"ak_createattestation":       a.AK.CreateAttestation,
+		"ak_createsignature":         a.AK.CreateSignature,
+		"tpmbound_public":            tpm2.Marshal(a.TPMBoundKey.Public),
+		"tpmbound_signer":            tpm2.Marshal(a.TPMBoundKey.Signer),
+		"tpmbound_createdata":        a.TPMBoundKey.CreateData,
+		"tpmbound_createattestation": a.TPMBoundKey.CreateAttestation,
+		"tpmbound_createsignature":   a.TPMBoundKey.CreateSignature,
 	})
 }
 
@@ -170,19 +174,22 @@ func (a *AttestationParameters) UnmarshalJSON(b []byte) error {
 		CreateSignature:   obj["ak_createsignature"],
 	}
 
-	sig, err := tpm2.Unmarshal[tpm2.TPMTSignature](obj["ssh_signature"])
+	tpmboundpub, err := tpm2.Unmarshal[tpm2.TPMTPublic](obj["tpmbound_public"])
 	if err != nil {
 		return err
 	}
 
-	sshpub, err := ssh.ParsePublicKey(obj["ssh_sshpubkey"])
+	tpmboundpubsigner, err := tpm2.Unmarshal[tpm2.TPMTPublic](obj["tpmbound_signer"])
 	if err != nil {
 		return err
 	}
 
-	a.SSHPubkey = &SignedSSHPubkey{
-		Signature: sig,
-		SSHPubkey: sshpub,
+	a.TPMBoundKey = &Attestation{
+		Public:            tpmboundpub,
+		Signer:            tpmboundpubsigner,
+		CreateData:        obj["tpmbound_createdata"],
+		CreateAttestation: obj["tpmbound_createattestation"],
+		CreateSignature:   obj["tpmbound_createsignature"],
 	}
 	return nil
 }
@@ -234,12 +241,11 @@ func getAK(rwc transport.TPMCloser) (*tpm2.NamedHandle, *tpm2.CreatePrimaryRespo
 	}, akRsp, nil
 }
 
-func NewAttestationParameters(rwc transport.TPMCloser, sshpub ssh.PublicKey) (*AttestationParameters, error) {
+func NewAttestationParameters(rwc transport.TPMCloser, tpmkey *keyfile.TPMKey, rsp *tpm2.CreateResponse) (*AttestationParameters, error) {
 	akHandle, AKrsp, err := getAK(rwc)
 	if err != nil {
 		return nil, err
 	}
-	defer keyfile.FlushHandle(rwc, akHandle)
 
 	inScheme := tpm2.TPMTSigScheme{
 		Scheme: tpm2.TPMAlgECDSA,
@@ -269,40 +275,41 @@ func NewAttestationParameters(rwc transport.TPMCloser, sshpub ssh.PublicKey) (*A
 		return nil, err
 	}
 
-	defer keyfile.FlushHandle(rwc, akHandle)
-
-	h, err := tpm2.Hash{
-		Hierarchy: tpm2.TPMRHEndorsement,
-		HashAlg:   tpm2.TPMAlgSHA256,
-		Data: tpm2.TPM2BMaxBuffer{
-			Buffer: tpm2.Marshal(tpm2.TPM2BData{Buffer: sshpub.Marshal()}),
-		},
-	}.Execute(rwc)
+	sess := keyfile.NewTPMSession(rwc)
+	keyhandle, parenthandle, err := keyfile.LoadKey(sess, tpmkey, []byte(nil))
 	if err != nil {
 		return nil, err
 	}
 
-	sign, err := tpm2.Sign{
-		KeyHandle: tpm2.AuthHandle{
+	tpmBoundCCRsp, err := tpm2.CertifyCreation{
+		SignHandle: tpm2.AuthHandle{
 			Handle: akHandle.Handle,
 			Name:   akHandle.Name,
 			Auth:   tpm2.PasswordAuth(nil),
 		},
-		Digest: tpm2.TPM2BDigest{
-			Buffer: h.OutHash.Buffer,
+		ObjectHandle: tpm2.NamedHandle{
+			Handle: keyhandle.Handle,
+			Name:   keyhandle.Name,
 		},
-		Validation: tpm2.TPMTTKHashCheck{
-			Tag:       tpm2.TPMSTHashCheck,
-			Hierarchy: tpm2.TPMRHEndorsement,
-			Digest: tpm2.TPM2BDigest{
-				Buffer: h.Validation.Digest.Buffer,
-			},
-		},
+		CreationHash:   rsp.CreationHash,
+		CreationTicket: rsp.CreationTicket,
+		InScheme:       inScheme,
 	}.Execute(rwc)
 	if err != nil {
 		return nil, err
 	}
+
+	// Flush everything now
+	keyfile.FlushHandle(rwc, keyhandle)
+	keyfile.FlushHandle(rwc, parenthandle)
+	keyfile.FlushHandle(rwc, akHandle)
+
 	akpub, err := AKrsp.OutPublic.Contents()
+	if err != nil {
+		return nil, err
+	}
+
+	keypub, err := rsp.OutPublic.Contents()
 	if err != nil {
 		return nil, err
 	}
@@ -311,20 +318,24 @@ func NewAttestationParameters(rwc transport.TPMCloser, sshpub ssh.PublicKey) (*A
 	if err != nil {
 		return nil, err
 	}
-	defer keyfile.FlushHandle(rwc, ekHandle)
+	keyfile.FlushHandle(rwc, ekHandle)
 
 	return &AttestationParameters{
 		EK:     ek,
 		Handle: akHandle,
 		AK: &Attestation{
 			Public:            akpub,
+			Signer:            akpub,
 			CreateData:        tpm2.Marshal(AKrsp.CreationData),
 			CreateAttestation: tpm2.Marshal(ccRsp.CertifyInfo),
 			CreateSignature:   tpm2.Marshal(ccRsp.Signature),
 		},
-		SSHPubkey: &SignedSSHPubkey{
-			SSHPubkey: sshpub,
-			Signature: &sign.Signature,
+		TPMBoundKey: &Attestation{
+			Public:            keypub,
+			Signer:            akpub,
+			CreateData:        tpm2.Marshal(rsp.CreationData),
+			CreateAttestation: tpm2.Marshal(tpmBoundCCRsp.CertifyInfo),
+			CreateSignature:   tpm2.Marshal(tpmBoundCCRsp.Signature),
 		},
 	}, nil
 }
@@ -386,7 +397,8 @@ func EkPolicy(t transport.TPM, handle tpm2.TPMISHPolicy, nonceTPM tpm2.TPM2BNonc
 	return err
 }
 
-func (a *AttestationParameters) VerifyCreation(aa *Attestation) (bool, error) {
+func (aa *Attestation) VerifyCreation(restricted bool) (bool, error) {
+	fmt.Println("verify creation")
 	attest2b, err := tpm2.Unmarshal[tpm2.TPM2BAttest](aa.CreateAttestation)
 	if err != nil {
 		return false, err
@@ -422,8 +434,14 @@ func (a *AttestationParameters) VerifyCreation(aa *Attestation) (bool, error) {
 		return false, fmt.Errorf("AK is exportable")
 	}
 
-	if !aa.Public.ObjectAttributes.Restricted || !aa.Public.ObjectAttributes.FixedParent || !aa.Public.ObjectAttributes.SensitiveDataOrigin {
+	fmt.Println(aa.Public.ObjectAttributes.Restricted)
+	fmt.Println(restricted)
+	if !aa.Public.ObjectAttributes.Restricted && restricted {
 		return false, fmt.Errorf("key is not limited to attestation")
+	}
+
+	if !aa.Public.ObjectAttributes.FixedParent || !aa.Public.ObjectAttributes.SensitiveDataOrigin {
+		return false, fmt.Errorf("key is not bound to TPM")
 	}
 
 	name, err := tpm2.ObjectName(aa.Public)
@@ -440,46 +458,42 @@ func (a *AttestationParameters) VerifyCreation(aa *Attestation) (bool, error) {
 		return false, err
 	}
 
-	return a.VerifySignature(aa.Public, aa.CreateAttestation[2:], sig)
-}
-
-func (a *AttestationParameters) VerifyAKCreation() (bool, error) {
-	return a.VerifyCreation(a.AK)
-}
-
-func (a *AttestationParameters) VerifySignature(pub *tpm2.TPMTPublic, b []byte, sig *tpm2.TPMTSignature) (bool, error) {
-	pk, err := template.FromTPMPublicToPubkey(pub)
-	if err != nil {
-		return false, fmt.Errorf("not a valid private key")
+	var signer *tpm2.TPMTPublic
+	if aa.Signer == nil {
+		signer = aa.Public
+	} else {
+		signer = aa.Signer
 	}
-	switch p := pk.(type) {
-	case *ecdsa.PublicKey:
-		eccsig, err := sig.Signature.ECDSA()
-		if err != nil {
-			return false, err
-		}
-		h, err := eccsig.Hash.Hash()
-		if err != nil {
-			return false, err
-		}
-		sh := h.New()
-		sh.Write(b)
-		return ecdsa.Verify(p, sh.Sum(nil), new(big.Int).SetBytes(eccsig.SignatureR.Buffer), new(big.Int).SetBytes(eccsig.SignatureS.Buffer)), nil
-	default:
-		// TODO: Implement RSA
-		return false, fmt.Errorf("not supported")
-	}
+
+	return VerifySignature(signer, aa.CreateAttestation[2:], sig)
 }
 
 func (a *AttestationParameters) Verify() (bool, error) {
-	ok, err := a.VerifyAKCreation()
+	// Caller needs to check if the ssh key matches the tpmbound.public
+	ok, err := a.AK.VerifyCreation(true)
 	if err != nil {
 		return false, err
 	}
 	if !ok {
 		return false, nil
 	}
-	ok, err = a.VerifySignature(a.AK.Public, tpm2.Marshal(tpm2.TPM2BData{Buffer: a.SSHPubkey.SSHPubkey.Marshal()}), a.SSHPubkey.Signature)
+
+	// Verify that the AK we trust is the same signer on the TPMBoundKey
+	akpubname, err := tpm2.ObjectName(a.AK.Public)
+	if err != nil {
+		return false, err
+	}
+	fmt.Println(a.TPMBoundKey.Signer)
+	tpmboundpubname, err := tpm2.ObjectName(a.TPMBoundKey.Signer)
+	if err != nil {
+		return false, err
+	}
+	if !bytes.Equal(akpubname.Buffer, tpmboundpubname.Buffer) {
+		return false, fmt.Errorf("AK is not the signer of the TPM Bound key")
+	}
+
+	// This is most likely not a restricted key
+	ok, err = a.TPMBoundKey.VerifyCreation(false)
 	if err != nil {
 		return false, err
 	}
@@ -671,4 +685,41 @@ func CreateSRK(rwc transport.TPMCloser, hier tpm2.TPMHandle, ownerAuth []byte) (
 		Name:   rsp.Name,
 		Auth:   tpm2.PasswordAuth(nil),
 	}, srkPublic, rsp, nil
+}
+
+func GetECDSAFromTPMTPublic(pub *tpm2.TPMTPublic) (*ecdsa.PublicKey, error) {
+	pk, err := template.FromTPMPublicToPubkey(pub)
+	if err != nil {
+		return nil, fmt.Errorf("not a valid private key")
+	}
+	switch p := pk.(type) {
+	case *ecdsa.PublicKey:
+		return p, nil
+	default:
+		return nil, fmt.Errorf("not a ecdsa key")
+	}
+}
+
+func VerifySignature(pub *tpm2.TPMTPublic, b []byte, sig *tpm2.TPMTSignature) (bool, error) {
+	pk, err := template.FromTPMPublicToPubkey(pub)
+	if err != nil {
+		return false, fmt.Errorf("not a valid private key")
+	}
+	switch p := pk.(type) {
+	case *ecdsa.PublicKey:
+		eccsig, err := sig.Signature.ECDSA()
+		if err != nil {
+			return false, err
+		}
+		h, err := eccsig.Hash.Hash()
+		if err != nil {
+			return false, err
+		}
+		sh := h.New()
+		sh.Write(b)
+		return ecdsa.Verify(p, sh.Sum(nil), new(big.Int).SetBytes(eccsig.SignatureR.Buffer), new(big.Int).SetBytes(eccsig.SignatureS.Buffer)), nil
+	default:
+		// TODO: Implement RSA
+		return false, fmt.Errorf("not supported")
+	}
 }

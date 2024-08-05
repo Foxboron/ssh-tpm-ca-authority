@@ -86,12 +86,12 @@ func TestMain(t *testing.T) {
 	defer ts.Close()
 	c := client.NewClient(ts.URL)
 
-	userkey, err := keyfile.NewLoadableKey(rwc, tpm2.TPMAlgECC, 256, []byte(""))
+	userkey, rsp, err := keyfile.NewLoadableKeyWithResponse(rwc, tpm2.TPMAlgECC, 256, []byte(""))
 	if err != nil {
 		t.Fatalf("message")
 	}
 
-	cert, err := c.GetCASignedKey(rwc, userkey, "fox", "test.local")
+	cert, err := c.GetCASignedKey(rwc, userkey, rsp, "fox", "test.local")
 	if err != nil {
 		t.Errorf("failed getting ca signed key: %v", err)
 	}

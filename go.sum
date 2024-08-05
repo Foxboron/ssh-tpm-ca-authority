@@ -9,6 +9,8 @@ github.com/foxboron/go-tpm-keyfiles v0.0.0-20240620184055-b891af1cbc88 h1:MXG/QP
 github.com/foxboron/go-tpm-keyfiles v0.0.0-20240620184055-b891af1cbc88/go.mod h1:uAyTlAUxchYuiFjTHmuIEJ4nGSm7iOPaGcAyA81fJ80=
 github.com/foxboron/go-tpm-keyfiles v0.0.0-20240725205618-b7c5a84edf9d h1:odwhCo3olsbN0fkXxCSH3aYz2OhrkcH93oU2QKEcI9s=
 github.com/foxboron/go-tpm-keyfiles v0.0.0-20240725205618-b7c5a84edf9d/go.mod h1:uAyTlAUxchYuiFjTHmuIEJ4nGSm7iOPaGcAyA81fJ80=
+github.com/foxboron/go-tpm-keyfiles v0.0.0-20240805214234-f870d6f1ff68 h1:u1Lbb2hWuU302IAaCccDkzPWLgpMBfvva/EMDutEUXk=
+github.com/foxboron/go-tpm-keyfiles v0.0.0-20240805214234-f870d6f1ff68/go.mod h1:uAyTlAUxchYuiFjTHmuIEJ4nGSm7iOPaGcAyA81fJ80=
 github.com/foxboron/ssh-tpm-agent v0.5.0 h1:2na6MdQzXmrl6STu1Uew1W4nr33h/nqp2gnB15AuqRw=
 github.com/foxboron/ssh-tpm-agent v0.5.0/go.mod h1:6mFmg4pKD/7W399XaSje2RqQvgUIuV5fKsiAUoT03Wc=
 github.com/foxboron/ssh-tpm-agent v1.0.0-rc2.0.20240714164000-1a148c850220 h1:Ny77x7zqWJ3XXcQCu/vllpv+R//9h8xeaUNJ9Jmujlo=
@@ -116,6 +118,8 @@ golang.org/x/sys v0.8.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.17.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
 golang.org/x/sys v0.22.0 h1:RI27ohtqKCnwULzJLqkv897zojh5/DwS/ENaMzUOaWI=
 golang.org/x/sys v0.22.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+golang.org/x/sys v0.23.0 h1:YfKFowiIMvtgl1UERQoTPPToxltDeZfbj4H7dVUCwmM=
+golang.org/x/sys v0.23.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
 golang.org/x/term v0.5.0/go.mod h1:jMB1sMXY+tzblOD4FWmEbocvup2/aLOaQEp7JmGp78k=

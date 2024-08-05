@@ -10,7 +10,6 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	keyfile "github.com/foxboron/go-tpm-keyfiles"
-	"github.com/foxboron/ssh-tpm-agent/key"
 	"github.com/foxboron/ssh-tpm-ca-authority/attest"
 	tpmoidc "github.com/foxboron/ssh-tpm-ca-authority/oidc"
 	"github.com/google/go-tpm/tpm2"
@@ -23,7 +22,6 @@ type ChallengeResponse struct {
 }
 
 type SignedCertResponse struct {
-	ImportableKey []byte
 	SignedSSHCert []byte
 }
 
@@ -48,22 +46,16 @@ func (a *AttestClient) GetSubmitURL() string {
 }
 
 func (a *AttestClient) GetKey(rwc transport.TPMCloser, user, host string) (*keyfile.TPMKey, *ssh.Certificate, error) {
-	userkey, err := keyfile.NewLoadableKey(rwc, tpm2.TPMAlgECC, 256, []byte(""))
+	userkey, rsp, err := keyfile.NewLoadableKeyWithResponse(rwc, tpm2.TPMAlgECC, 256, []byte(""))
 	if err != nil {
 		return nil, nil, err
 	}
-	sshca, err := a.GetCASignedKey(rwc, userkey, user, host)
+	sshca, err := a.GetCASignedKey(rwc, userkey, rsp, user, host)
 	return userkey, sshca, err
 }
 
-func (a *AttestClient) GetCASignedKey(rwc transport.TPMCloser, clientkey *keyfile.TPMKey, user, host string) (*ssh.Certificate, error) {
-	clientSSHKey := key.SSHTPMKey{TPMKey: clientkey}
-	clientsshkey, err := clientSSHKey.SSHPublicKey()
-	if err != nil {
-		return nil, err
-	}
-
-	ap, err := attest.NewAttestationParameters(rwc, clientsshkey)
+func (a *AttestClient) GetCASignedKey(rwc transport.TPMCloser, clientkey *keyfile.TPMKey, rsp *tpm2.CreateResponse, user, host string) (*ssh.Certificate, error) {
+	ap, err := attest.NewAttestationParameters(rwc, clientkey, rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +78,7 @@ func (a *AttestClient) GetCASignedKey(rwc transport.TPMCloser, clientkey *keyfil
 	if err != nil {
 		return nil, fmt.Errorf("failed doing attest: %v", err)
 	}
+
 	ch, err := ijson.Decode[*attest.EncryptedCredential](resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed decording json encryptedcredential: %v", err)
