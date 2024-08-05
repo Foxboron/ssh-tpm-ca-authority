@@ -398,7 +398,6 @@ func EkPolicy(t transport.TPM, handle tpm2.TPMISHPolicy, nonceTPM tpm2.TPM2BNonc
 }
 
 func (aa *Attestation) VerifyCreation(restricted bool) (bool, error) {
-	fmt.Println("verify creation")
 	attest2b, err := tpm2.Unmarshal[tpm2.TPM2BAttest](aa.CreateAttestation)
 	if err != nil {
 		return false, err
@@ -434,8 +433,6 @@ func (aa *Attestation) VerifyCreation(restricted bool) (bool, error) {
 		return false, fmt.Errorf("AK is exportable")
 	}
 
-	fmt.Println(aa.Public.ObjectAttributes.Restricted)
-	fmt.Println(restricted)
 	if !aa.Public.ObjectAttributes.Restricted && restricted {
 		return false, fmt.Errorf("key is not limited to attestation")
 	}
@@ -483,7 +480,6 @@ func (a *AttestationParameters) Verify() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	fmt.Println(a.TPMBoundKey.Signer)
 	tpmboundpubname, err := tpm2.ObjectName(a.TPMBoundKey.Signer)
 	if err != nil {
 		return false, err
