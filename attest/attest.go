@@ -469,7 +469,7 @@ func (a *AttestationParameters) Verify() (bool, error) {
 	// Caller needs to check if the ssh key matches the tpmbound.public
 	ok, err := a.AK.VerifyCreation(true)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed AK validation: %v", err)
 	}
 	if !ok {
 		return false, nil
@@ -491,7 +491,7 @@ func (a *AttestationParameters) Verify() (bool, error) {
 	// This is most likely not a restricted key
 	ok, err = a.TPMBoundKey.VerifyCreation(false)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed TPM Bound Key validation: %v", err)
 	}
 	if !ok {
 		return false, nil

@@ -70,22 +70,10 @@ func (t *TPMAttestServer) attestHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ok, err = params.AK.VerifyCreation(true)
-	if err != nil {
-		fmt.Println(err)
-		fmt.Fprintf(w, "failed checking AK creation: %v", err)
-		return
-	}
-
-	if !ok {
-		fmt.Fprintf(w, "AK creation doesn't validate")
-		return
-	}
-
 	ok, err = params.Verify()
 	if err != nil {
 		fmt.Println(err)
-		fmt.Fprintf(w, "failed checking signature over ssh pubkey creation: %v", err)
+		fmt.Fprintf(w, "attestation did not validate: %v", err)
 		return
 	}
 	if !ok {
