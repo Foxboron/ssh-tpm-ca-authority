@@ -44,6 +44,7 @@ func run(ctx context.Context, rwc transport.TPMCloser, config *server.Config) er
 		close(idleConnsClosed)
 	}()
 
+	log.Printf("HTTP server listening on :8080")
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("HTTP server ListenAndServe: %v", err)
 	}

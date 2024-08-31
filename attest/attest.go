@@ -19,7 +19,6 @@ import (
 	"github.com/foxboron/go-tpm-keyfiles/template"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
-	"golang.org/x/crypto/ssh"
 )
 
 var (
@@ -111,11 +110,6 @@ type Attestation struct {
 	CreateData        []byte
 	CreateAttestation []byte
 	CreateSignature   []byte
-}
-
-type SignedSSHPubkey struct {
-	SSHPubkey ssh.PublicKey
-	Signature *tpm2.TPMTSignature
 }
 
 // All parameters here
